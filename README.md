@@ -1,1 +1,60 @@
-# football_super_star_prediction
+# Football Superstar Prediction
+
+A full-stack web application for predicting football player superstar potential using machine learning (XGBoost).
+
+## Features
+
+- 🔍 **Player Search**: Search for players from the dataset with autocomplete
+- 📊 **Custom Prediction**: Create a custom player profile and predict their potential
+- 🤖 **ML-Powered**: Uses trained XGBoost model for accurate predictions
+- 🎨 **Modern UI**: Beautiful React frontend with real-time predictions
+- 🐳 **Docker Support**: Easy deployment with Docker Compose
+
+## Quick Start with Docker
+
+The easiest way to run the application:
+
+```bash
+# Build and start all services
+docker-compose up --build
+
+# Access the application
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8000
+```
+
+For detailed Docker instructions, see [DOCKER.md](DOCKER.md).
+
+## Manual Setup
+
+See [SETUP.md](SETUP.md) for manual installation instructions.
+
+## Project Structure
+
+```
+football_super_star_prediction/
+├── backend/              # Django REST API
+│   ├── api/             # API endpoints and ML integration
+│   └── football_predictor/  # Django project settings
+├── data/                 # CSV datasets
+├── notebooks/            # Jupyter notebooks and trained models
+└── superstar-ai-scout-main/  # React frontend
+```
+
+## API Endpoints
+
+- `GET /api/players/search/?q=<query>` - Search players
+- `POST /api/players/predict/` - Predict player potential
+
+See [backend/README.md](backend/README.md) for detailed API documentation.
+
+## Technologies
+
+- **Backend**: Django, Django REST Framework, XGBoost, scikit-learn
+- **Frontend**: React, TypeScript, Vite, Tailwind CSS
+- **ML**: XGBoost, scikit-learn, joblib
+- **Deployment**: Docker, Docker Compose
+
+## License
+
+This project is for educational purposes.

@@ -1,0 +1,45 @@
+version: "3.8"
+
+# Development docker-compose with hot reload
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: football-predictor-backend-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./notebooks:/app/notebooks:ro
+      - ./backend:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=football_predictor.settings
+      - DEBUG=1
+    networks:
+      - football-network
+    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+
+  frontend:
+    build:
+      context: ./superstar-ai-scout-main
+      dockerfile: Dockerfile.dev
+    container_name: football-predictor-frontend-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./superstar-ai-scout-main:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - football-network
+    command: npm run dev -- --host
+
+networks:
+  football-network:
+    driver: bridge
