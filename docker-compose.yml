@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: football-predictor-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data and notebooks directories so the backend can access them
+      - ./data:/app/data:ro
+      - ./notebooks:/app/notebooks:ro
+      # Mount backend code for development (optional - remove in production)
+      - ./backend:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=football_predictor.settings
+    networks:
+      - football-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/players/search/?q=test"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./superstar-ai-scout-main
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8000
+    container_name: football-predictor-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    networks:
+      - football-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  football-network:
+    driver: bridge
+
