@@ -5,12 +5,22 @@ interface PlayerCardProps {
   name: string;
   position: string;
   overall: number;
-  probability: number;
+  potential?: number;
   image?: string;
   onClick?: () => void;
+  superstarLabel?: string;
+  willBeSuperstar?: boolean;
 }
 
-export function PlayerCard({ name, position, overall, probability, onClick }: PlayerCardProps) {
+export function PlayerCard({
+  name,
+  position,
+  overall,
+  potential,
+  onClick,
+  superstarLabel,
+  willBeSuperstar,
+}: PlayerCardProps) {
   const firstName = name.split(" ")[0];
   const lastName = name.split(" ").slice(1).join(" ");
 
@@ -25,7 +35,7 @@ export function PlayerCard({ name, position, overall, probability, onClick }: Pl
         {/* Card Background */}
         <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-card via-card to-secondary p-1 shadow-neon">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-stadium-gold/10" />
-          
+
           {/* Inner Card */}
           <div className="relative rounded-lg bg-card/90 p-4 backdrop-blur-sm">
             {/* Top Section - Rating */}
@@ -34,14 +44,20 @@ export function PlayerCard({ name, position, overall, probability, onClick }: Pl
                 <span className="font-display text-3xl font-bold text-primary text-glow">
                   {overall}
                 </span>
-                <span className="text-xs uppercase text-muted-foreground">{position}</span>
+                <span className="text-xs uppercase text-muted-foreground">
+                  {position}
+                </span>
               </div>
               <div className="flex gap-0.5">
                 {[...Array(5)].map((_, i) => (
                   <Star
                     key={i}
                     size={12}
-                    className={i < Math.floor(probability / 20) ? "fill-stadium-gold text-stadium-gold" : "text-muted"}
+                    className={
+                      i < 5
+                        ? "fill-stadium-gold text-stadium-gold"
+                        : "text-muted"
+                    }
                   />
                 ))}
               </div>
@@ -50,7 +66,8 @@ export function PlayerCard({ name, position, overall, probability, onClick }: Pl
             {/* Player Avatar Placeholder */}
             <div className="mx-auto mb-3 flex h-24 w-24 items-center justify-center rounded-full border-2 border-primary/30 bg-gradient-to-br from-primary/20 to-stadium-gold/20">
               <span className="font-display text-2xl font-bold text-foreground">
-                {firstName[0]}{lastName?.[0] || ""}
+                {firstName[0]}
+                {lastName?.[0] || ""}
               </span>
             </div>
 
@@ -62,16 +79,36 @@ export function PlayerCard({ name, position, overall, probability, onClick }: Pl
               </p>
             </div>
 
-            {/* Probability Badge */}
-            <motion.div
-              className="mx-auto w-fit rounded-full border border-primary/50 bg-primary/20 px-3 py-1"
-              animate={{ boxShadow: ["0 0 10px hsl(151 100% 50% / 0.3)", "0 0 20px hsl(151 100% 50% / 0.5)", "0 0 10px hsl(151 100% 50% / 0.3)"] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <span className="font-display text-xs font-semibold text-primary">
-                {probability}% Superstar 🔥
-              </span>
-            </motion.div>
+            {/* Potential Badge */}
+            {typeof potential === "number" && (
+              <motion.div
+                className="mx-auto mb-1 w-fit rounded-full border border-primary/50 bg-primary/20 px-3 py-1"
+                animate={{
+                  boxShadow: [
+                    "0 0 10px hsl(151 100% 50% / 0.3)",
+                    "0 0 20px hsl(151 100% 50% / 0.5)",
+                    "0 0 10px hsl(151 100% 50% / 0.3)",
+                  ],
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <span className="font-display text-xs font-semibold text-primary">
+                  POT {potential}
+                </span>
+              </motion.div>
+            )}
+
+            {superstarLabel && (
+              <div
+                className={`mx-auto w-fit rounded-full px-3 py-1 text-[10px] font-semibold ${
+                  willBeSuperstar
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {superstarLabel}
+              </div>
+            )}
           </div>
         </div>
       </div>

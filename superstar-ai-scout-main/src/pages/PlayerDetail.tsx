@@ -1,25 +1,83 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Star, Share2, Trophy, Zap } from "lucide-react";
+import { ArrowLeft, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StadiumParticles } from "@/components/StadiumParticles";
-import { RadarChart } from "@/components/RadarChart";
-import { ProbabilityGauge } from "@/components/ProbabilityGauge";
 import { StatBreakdown } from "@/components/StatBreakdown";
-import { mockPlayers, legendaryPlayers, calculateSuperstarProbability } from "@/lib/players";
+import {
+  getPlayerById,
+  predictPlayer,
+  type PlayerSearchResult,
+  type PredictionResponse,
+} from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
 export default function PlayerDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const decodedName = decodeURIComponent(name || "");
-  const allPlayers = [...mockPlayers, ...legendaryPlayers];
-  const player = allPlayers.find(
-    (p) => p.name.toLowerCase() === decodedName.toLowerCase()
-  );
+  const [player, setPlayer] = useState<PlayerSearchResult | null>(null);
+  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  if (!player) {
+  useEffect(() => {
+    const load = async () => {
+      if (!id) {
+        setIsLoading(false);
+        return;
+      }
+
+      const playerId = Number(id);
+      if (Number.isNaN(playerId)) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+
+        const p = await getPlayerById(playerId);
+        if (!p) {
+          toast({
+            title: "Player not found",
+            description: "Could not load player details.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        setPlayer(p);
+
+        const pred = await predictPlayer({ player_id: playerId });
+        setPrediction(pred);
+      } catch (error: any) {
+        console.error("Error loading player detail", error);
+        toast({
+          title: "Error",
+          description:
+            error?.message ||
+            "Failed to load player details. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    load();
+  }, [id, toast]);
+
+  if (!player || !prediction) {
+    if (isLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <p className="text-sm text-muted-foreground">Loading player...</p>
+        </div>
+      );
+    }
+
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
@@ -34,7 +92,7 @@ export default function PlayerDetail() {
     );
   }
 
-  const result = calculateSuperstarProbability(player);
+  const result = prediction;
 
   const handleShare = () => {
     const text = `Check out ${player.name}! ${result.probability}% Superstar Probability 🧬⚽ #SuperstarScoutAI`;
@@ -44,6 +102,61 @@ export default function PlayerDetail() {
       description: "Share this player's profile",
     });
   };
+
+  const comparisons = [
+    {
+      stat: "pace",
+      label: "Pace",
+      emoji: "💨",
+      comparison:
+        (player.pace || 50) >= 90
+          ? "Mbappé Tier"
+          : (player.pace || 50) >= 80
+          ? "World Class"
+          : (player.pace || 50) >= 70
+          ? "Above Average"
+          : "Developing",
+    },
+    {
+      stat: "shooting",
+      label: "Shooting",
+      emoji: "⚽",
+      comparison:
+        (player.shooting || 50) >= 88
+          ? "Haaland Level"
+          : (player.shooting || 50) >= 80
+          ? "Elite Finisher"
+          : (player.shooting || 50) >= 70
+          ? "Clinical"
+          : "Improving",
+    },
+    {
+      stat: "dribbling",
+      label: "Dribbling",
+      emoji: "🎯",
+      comparison:
+        (player.dribbling || 50) >= 90
+          ? "Messi DNA"
+          : (player.dribbling || 50) >= 80
+          ? "Silky Skills"
+          : (player.dribbling || 50) >= 70
+          ? "Technical"
+          : "Work in Progress",
+    },
+    {
+      stat: "passing",
+      label: "Passing",
+      emoji: "🎯",
+      comparison:
+        (player.passing || 50) >= 85
+          ? "Playmaker"
+          : (player.passing || 50) >= 75
+          ? "Vision"
+          : (player.passing || 50) >= 65
+          ? "Reliable"
+          : "Basic",
+    },
+  ];
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -89,7 +202,7 @@ export default function PlayerDetail() {
               <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/10 via-transparent to-stadium-gold/10" />
 
               <div className="relative">
-                {/* Top row - Rating & Stars */}
+                {/* Top row - Rating & Info */}
                 <div className="mb-4 flex items-start justify-between">
                   <div className="flex flex-col">
                     <span className="font-display text-5xl font-bold text-primary text-glow">
@@ -101,21 +214,11 @@ export default function PlayerDetail() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    <div className="flex gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          size={16}
-                          className={
-                            i < Math.floor(result.probability / 20)
-                              ? "fill-stadium-gold text-stadium-gold"
-                              : "text-muted"
-                          }
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
                       POT {player.potential}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {result.superstar_label}
                     </span>
                   </div>
                 </div>
@@ -123,7 +226,10 @@ export default function PlayerDetail() {
                 {/* Player Avatar */}
                 <div className="mx-auto mb-4 flex h-32 w-32 items-center justify-center rounded-full border-4 border-primary/30 bg-gradient-to-br from-primary/20 to-stadium-gold/20">
                   <span className="font-display text-4xl font-bold text-foreground">
-                    {player.name.split(" ").map((n) => n[0]).join("")}
+                    {player.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
                   </span>
                 </div>
 
@@ -151,7 +257,9 @@ export default function PlayerDetail() {
                       <p className="font-display text-lg font-bold text-foreground">
                         {stat.value}
                       </p>
-                      <p className="text-xs text-muted-foreground">{stat.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {stat.label}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -159,51 +267,6 @@ export default function PlayerDetail() {
             </div>
           </div>
         </motion.div>
-
-        {/* Analysis Section */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Probability Gauge */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="rounded-xl border border-border bg-card/50 p-6 backdrop-blur-sm"
-          >
-            <div className="mb-4 flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-stadium-gold" />
-              <h2 className="font-display text-lg font-semibold text-foreground">
-                Superstar Probability
-              </h2>
-            </div>
-            <div className="flex justify-center">
-              <ProbabilityGauge
-                probability={result.probability}
-                tier={result.tier}
-              />
-            </div>
-          </motion.div>
-
-          {/* Radar Chart */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 }}
-            className="rounded-xl border border-border bg-card/50 p-6 backdrop-blur-sm"
-          >
-            <div className="mb-4 flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold text-foreground">
-                Stats vs Superstar Benchmark
-              </h2>
-            </div>
-            <div className="flex justify-center">
-              <RadarChart
-                userStats={result.userStats}
-                benchmarkStats={result.benchmarkStats}
-              />
-            </div>
-          </motion.div>
-        </div>
 
         {/* Breakdown */}
         <motion.div
@@ -215,42 +278,7 @@ export default function PlayerDetail() {
           <h2 className="mb-4 font-display text-lg font-semibold text-foreground">
             Skill Analysis
           </h2>
-          <StatBreakdown comparisons={result.comparisons} />
-        </motion.div>
-
-        {/* Scout Quote */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="mt-6 rounded-xl border border-primary/30 bg-primary/5 p-6 text-center"
-        >
-          <p className="font-body text-lg italic text-foreground">
-            "{result.probability >= 80
-              ? "This kid's got superstar written all over them! 🌟"
-              : result.probability >= 60
-              ? "Serious potential here - one to watch! 👀"
-              : "A developing talent with room to grow 📈"}"
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            — Superstar Scout AI Analysis
-          </p>
-        </motion.div>
-
-        {/* CTA */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="mt-8 text-center"
-        >
-          <Button
-            size="lg"
-            onClick={() => navigate("/predict")}
-            className="gap-2 rounded-full bg-primary font-display font-semibold text-primary-foreground shadow-neon"
-          >
-            Create Your Own Player
-          </Button>
+          <StatBreakdown comparisons={comparisons} />
         </motion.div>
       </main>
     </div>

@@ -1,19 +1,30 @@
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Sparkles, Trophy, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { Trophy, Zap } from "lucide-react";
 import { StadiumParticles } from "@/components/StadiumParticles";
-import { PlayerSearch } from "@/components/PlayerSearch";
 import { PlayerCard } from "@/components/PlayerCard";
-import { legendaryPlayers, calculateSuperstarProbability } from "@/lib/players";
+import { PlayerFilter } from "@/components/PlayerFilter";
+import { getHighlights, type HighlightPlayer } from "@/lib/api";
 
 export default function Index() {
   const navigate = useNavigate();
+  const [legends, setLegends] = useState<HighlightPlayer[]>([]);
+  const [prospects, setProspects] = useState<HighlightPlayer[]>([]);
 
-  const heroPlayers = legendaryPlayers.map((player) => ({
-    ...player,
-    probability: calculateSuperstarProbability(player).probability,
-  }));
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await getHighlights();
+        setLegends(data.legends);
+        setProspects(data.prospects);
+      } catch (e) {
+        console.error("Failed to load highlight players", e);
+      }
+    };
+
+    load();
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
@@ -52,49 +63,21 @@ export default function Index() {
             className="mb-8 text-center"
           >
             <h2 className="mb-4 font-display text-4xl font-bold leading-tight text-foreground md:text-6xl lg:text-7xl">
-              Find Football's
+              Explore FIFA 21's
               <br />
-              <span className="gradient-text">Next Legend</span>
+              <span className="gradient-text">Future Superstars</span>
             </h2>
             <p className="mx-auto max-w-xl text-lg text-muted-foreground">
-              AI-powered scouting that predicts which young players will become
-              the next Mbappé, Haaland, or Messi 🧬
+              Use our AI-powered scout to browse FIFA 21 players by country,
+              position and age, and see who has the superstar DNA.
             </p>
-          </motion.div>
-
-          {/* Search Bar */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 }}
-            className="mb-12 w-full max-w-2xl"
-          >
-            <PlayerSearch />
-          </motion.div>
-
-          {/* CTA Button */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="mb-16"
-          >
-            <Button
-              size="lg"
-              onClick={() => navigate("/predict")}
-              className="group h-14 gap-2 rounded-full bg-primary px-8 font-display text-lg font-semibold text-primary-foreground shadow-neon transition-all hover:bg-primary/90 hover:shadow-neon-lg"
-            >
-              <Sparkles className="h-5 w-5" />
-              Predict Future
-              <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </Button>
           </motion.div>
 
           {/* Hero Player Cards */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
+            transition={{ delay: 0.4 }}
             className="w-full"
           >
             <div className="mb-6 flex items-center justify-center gap-2">
@@ -106,45 +89,73 @@ export default function Index() {
             </div>
 
             <div className="flex flex-wrap justify-center gap-4 md:gap-6">
-              {heroPlayers.map((player, index) => (
+              {legends.map((player, index) => (
                 <motion.div
-                  key={player.id}
+                  key={player.player_id}
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 1 + index * 0.15 }}
+                  transition={{ delay: 0.6 + index * 0.15 }}
                   className="w-[160px] md:w-[180px]"
                 >
                   <PlayerCard
                     name={player.name}
                     position={player.position}
                     overall={player.overall}
-                    probability={player.probability}
-                    onClick={() => navigate("/predict")}
+                    potential={player.potential}
+                    willBeSuperstar={player.will_be_superstar}
+                    superstarLabel={player.superstar_label}
+                    onClick={() => navigate(`/player/${player.player_id}`)}
                   />
                 </motion.div>
               ))}
             </div>
           </motion.div>
 
-          {/* Stats bar */}
+          {/* Popular Prospects */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.5 }}
-            className="mt-16 flex flex-wrap justify-center gap-8 md:gap-16"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0 }}
+            className="mt-16 w-full"
           >
-            {[
-              { label: "Players Analyzed", value: "10K+" },
-              { label: "Accuracy Rate", value: "94%" },
-              { label: "Future Stars Found", value: "847" },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="font-display text-2xl font-bold text-primary text-glow md:text-3xl">
-                  {stat.value}
-                </p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-              </div>
-            ))}
+            <div className="mb-4 flex items-center justify-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <span className="font-display text-sm uppercase tracking-wider text-muted-foreground">
+                Popular Young Prospects
+              </span>
+              <Zap className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex flex-wrap justify-center gap-4 md:gap-6">
+              {prospects.map((player, index) => (
+                <motion.div
+                  key={player.player_id}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.1 + index * 0.05 }}
+                  className="w-[150px] md:w-[170px]"
+                >
+                  <PlayerCard
+                    name={player.name}
+                    position={player.position}
+                    overall={player.overall}
+                    potential={player.potential}
+                    willBeSuperstar={player.will_be_superstar}
+                    superstarLabel={player.superstar_label}
+                    onClick={() => navigate(`/player/${player.player_id}`)}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* FIFA 21 Filter Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.5 }}
+            className="w-full"
+          >
+            <PlayerFilter />
           </motion.div>
         </section>
       </main>
