@@ -30,9 +30,7 @@ def load_player_data():
         if not csv_path.exists():
             raise FileNotFoundError(f"Player data file not found: {csv_path}")
 
-        # Load all columns needed for the 27 features required by the model
         columns = [
-            # Basic info
             "player_id",
             "short_name",
             "long_name",
