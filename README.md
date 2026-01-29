@@ -37,9 +37,31 @@ football_super_star_prediction/
 │   ├── api/             # API endpoints and ML integration
 │   └── football_predictor/  # Django project settings
 ├── data/                 # CSV datasets
-├── notebooks/            # Jupyter notebooks and trained models
+├── notebooks/            # Jupyter notebooks and MLOps pipeline
+│   ├── mlops_*.py       # MLOps scripts (data versioning, training, sweeps, registry)
+│   ├── run_mlops_pipeline.py  # Main pipeline runner
+│   └── MLOPS_README.md  # MLOps documentation
 └── superstar-ai-scout-main/  # React frontend
 ```
+
+## MLOps Pipeline
+
+This project includes a complete MLOps implementation using Weights & Biases (W&B):
+
+- ✅ **Data Versioning** - Datasets versioned as W&B artifacts
+- ✅ **Experiment Tracking** - All training runs tracked with metrics
+- ✅ **Hyperparameter Optimization** - Bayesian sweeps for model tuning
+- ✅ **Model Registration** - Best models registered as versioned artifacts
+
+### Quick Start (MLOps)
+
+```bash
+cd notebooks
+python run_mlops_pipeline.py
+# Choose option 5: All phases (1, 2, 3, 4)
+```
+
+For detailed MLOps documentation, see [notebooks/MLOPS_README.md](notebooks/MLOPS_README.md).
 
 ## API Endpoints
 
