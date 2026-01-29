@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import wandb
 import joblib
+import json
+import yaml
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.semi_supervised import SelfTrainingClassifier
@@ -20,52 +22,197 @@ from xgboost import XGBClassifier
 # Configuration - Import from centralized config
 from mlops_config import ENTITY, PROJECT
 
-def get_best_run_from_sweep(sweep_id):
+def get_best_run_from_sweep(sweep_id, use_local_cache=False):
     """
     Get the best run from a completed sweep.
     
     Args:
         sweep_id: W&B sweep ID
+        use_local_cache: If True, use local cache instead of API (for offline mode)
     
     Returns:
-        Best run object
+        Best run object or dict with best run info
     """
-    api = wandb.Api()
-    sweep = api.sweep(f"{ENTITY}/{PROJECT}/{sweep_id}")
-    best_run = sweep.best_run()
+    if use_local_cache:
+        return get_best_run_from_local_cache(sweep_id)
     
-    print(f"Best run: {best_run.name}")
-    print(f"Best config: {best_run.config}")
-    print(f"Best F1 score: {best_run.summary.get('val/f1', 'N/A')}")
-    
-    return best_run
+    try:
+        api = wandb.Api()
+        sweep = api.sweep(f"{ENTITY}/{PROJECT}/{sweep_id}")
+        best_run = sweep.best_run()
+        
+        print(f"Best run: {best_run.name}")
+        print(f"Best config: {best_run.config}")
+        print(f"Best F1 score: {best_run.summary.get('val/f1', 'N/A')}")
+        
+        return best_run
+    except Exception as e:
+        print(f"[WARN] Could not connect to W&B API: {e}")
+        print("[INFO] Falling back to local cache...")
+        return get_best_run_from_local_cache(sweep_id)
 
-def register_best_model(sweep_id=None, best_run=None):
+def get_best_run_from_local_cache(sweep_id):
+    """
+    Get the best run from local W&B cache without API connection.
+    
+    Args:
+        sweep_id: W&B sweep ID
+    
+    Returns:
+        dict with best run info (config, summary, etc.)
+    """
+    import json
+    import yaml
+    
+    wandb_dir = Path("wandb")
+    sweep_dir = wandb_dir / f"sweep-{sweep_id}"
+    
+    if not sweep_dir.exists():
+        raise ValueError(f"Sweep directory not found: {sweep_dir}")
+    
+    # Get all run configs from sweep
+    config_files = list(sweep_dir.glob("config-*.yaml"))
+    
+    if not config_files:
+        raise ValueError(f"No run configs found in sweep directory: {sweep_dir}")
+    
+    # Find all runs from this sweep and their summaries
+    runs = []
+    for config_file in config_files:
+        run_id = config_file.stem.replace("config-", "")
+        
+        # Find the run directory
+        run_dirs = list(wandb_dir.glob(f"run-*-{run_id}"))
+        if not run_dirs:
+            continue
+        
+        run_dir = run_dirs[0]
+        summary_file = run_dir / "files" / "wandb-summary.json"
+        config_file_full = run_dir / "files" / "config.yaml"
+        
+        if summary_file.exists() and config_file_full.exists():
+            try:
+                with open(summary_file, 'r', encoding='utf-8') as f:
+                    summary = json.load(f)
+                
+                with open(config_file_full, 'r', encoding='utf-8') as f:
+                    config_raw = yaml.safe_load(f)
+                
+                # Extract actual values from config (W&B stores them as {'value': ...})
+                config = {}
+                for key, value in config_raw.items():
+                    if key == '_wandb':
+                        continue  # Skip W&B metadata
+                    if isinstance(value, dict) and 'value' in value:
+                        config[key] = value['value']
+                    else:
+                        config[key] = value
+                
+                val_f1 = summary.get('val/f1', 0)
+                runs.append({
+                    'id': run_id,
+                    'name': run_dir.name,
+                    'config': config,
+                    'summary': summary,
+                    'val_f1': val_f1
+                })
+            except Exception as e:
+                print(f"[WARN] Could not read run {run_id}: {e}")
+                continue
+    
+    if not runs:
+        raise ValueError(f"No valid runs found in sweep {sweep_id}")
+    
+    # Find best run by val/f1
+    best_run = max(runs, key=lambda r: r['val_f1'])
+    
+    print(f"[OK] Found {len(runs)} runs in local cache")
+    print(f"Best run: {best_run['name']}")
+    print(f"Best config: {best_run['config']}")
+    print(f"Best F1 score: {best_run['val_f1']:.4f}")
+    
+    # Return a dict that mimics the wandb Run object interface
+    class LocalRun:
+        def __init__(self, run_data):
+            self.id = run_data['id']
+            self.name = run_data['name']
+            self.config = run_data['config']
+            self.summary = run_data['summary']
+    
+    return LocalRun(best_run)
+
+def register_best_model(sweep_id=None, best_run=None, use_offline=False):
     """
     Register the best model from a sweep as a W&B artifact.
     
     Args:
         sweep_id: Optional sweep ID to get best run from
         best_run: Optional best run object (if already retrieved)
+        use_offline: If True, use local cache only (no W&B API calls)
     """
     # Get best run
     if best_run is None:
         if sweep_id is None:
             raise ValueError("Either sweep_id or best_run must be provided")
-        best_run = get_best_run_from_sweep(sweep_id)
+        best_run = get_best_run_from_sweep(sweep_id, use_local_cache=use_offline)
     
-    # Initialize W&B run for model registration
-    run = wandb.init(
-        project=PROJECT,
-        entity=ENTITY,
-        job_type="register-model",
-        notes=f"Registering best model from run: {best_run.name}"
-    )
+    # Initialize W&B run for model registration (with offline mode support)
+    try:
+        run = wandb.init(
+            project=PROJECT,
+            entity=ENTITY,
+            job_type="register-model",
+            notes=f"Registering best model from run: {getattr(best_run, 'name', 'local-cache')}"
+        )
+    except Exception as e:
+        if use_offline:
+            print(f"[WARN] Could not initialize W&B run: {e}")
+            print("[INFO] Continuing in offline mode - model will be saved locally only")
+            run = None
+        else:
+            raise
     
-    # Load versioned dataset from W&B
+    # Load versioned dataset from W&B (with fallback to local cache)
     print("Loading dataset from W&B artifact...")
-    artifact = run.use_artifact(f'{ENTITY}/{PROJECT}/football-player-dataset:latest')
-    data_dir = Path(artifact.download())
+    data_dir = None
+    
+    try:
+        if run is not None:
+            artifact = run.use_artifact(f'{ENTITY}/{PROJECT}/football-player-dataset:latest')
+            data_dir = Path(artifact.download())
+            print(f"[OK] Dataset downloaded from W&B artifact")
+        else:
+            raise ConnectionError("W&B run not initialized (offline mode)")
+    except Exception as e:
+        print(f"[WARN] Could not download artifact from W&B: {e}")
+        print("[INFO] Trying to use local cached artifact...")
+        
+        # Try to find local artifact cache (from Phase 1)
+        from mlops_config import OUTPUT_DIR
+        local_data_dir = Path(OUTPUT_DIR)
+        
+        # Also check wandb artifact cache
+        wandb_cache = Path("wandb") / "artifacts" / f"{ENTITY}__{PROJECT}__football-player-dataset"
+        
+        if local_data_dir.exists() and (local_data_dir / "train.csv").exists():
+            print(f"[OK] Using local dataset from: {local_data_dir}")
+            data_dir = local_data_dir
+        elif wandb_cache.exists():
+            # Find the latest version in cache
+            versions = sorted([d for d in wandb_cache.iterdir() if d.is_dir()], reverse=True)
+            if versions:
+                latest_version = versions[0]
+                data_files = list(latest_version.rglob("*.csv"))
+                if data_files:
+                    print(f"[OK] Using cached artifact from: {latest_version}")
+                    data_dir = data_files[0].parent
+        else:
+            print("[FAIL] No local dataset found.")
+            print("[INFO] Options:")
+            print("  1. Check your internet connection and try again")
+            print("  2. Run Phase 1 first to create local dataset")
+            print("  3. Wait for network to recover and retry")
+            raise ConnectionError(f"Could not load dataset: {e}")
     
     train_df = pd.read_csv(data_dir / "train.csv")
     val_df = pd.read_csv(data_dir / "val.csv")
@@ -177,8 +324,8 @@ def register_best_model(sweep_id=None, best_run=None):
             "val_roc_auc": float(val_roc_auc),
             "test_f1": float(test_f1),
             "test_roc_auc": float(test_roc_auc),
-            "best_run_id": best_run.id,
-            "best_run_name": best_run.name,
+            "best_run_id": getattr(best_run, 'id', 'local-cache'),
+            "best_run_name": getattr(best_run, 'name', 'local-cache'),
             "num_features": len(feature_columns),
             "features": feature_columns
         }
@@ -188,20 +335,20 @@ def register_best_model(sweep_id=None, best_run=None):
     model_artifact.add_file(str(model_path))
     model_artifact.add_file(str(scaler_path))
     
-    # Log artifact
-    run.log_artifact(model_artifact)
-    
-    # Optionally link to model registry (if available)
-    # run.link_artifact(
-    #     model_artifact,
-    #     f"{ENTITY}/model-registry/football-superstar-predictor",
-    #     aliases=["production", "best"]
-    # )
-    
-    run.finish()
-    
-    print("\n[SUCCESS] Best model registered in W&B!")
-    print(f"View at: https://wandb.ai/{ENTITY}/{PROJECT}/artifacts/model/football-superstar-predictor")
+    # Log artifact (if W&B is available)
+    if run is not None:
+        try:
+            run.log_artifact(model_artifact)
+            run.finish()
+            print("\n[SUCCESS] Best model registered in W&B!")
+            print(f"View at: https://wandb.ai/{ENTITY}/{PROJECT}/artifacts/model/football-superstar-predictor")
+        except Exception as e:
+            print(f"[WARN] Could not upload to W&B: {e}")
+            print("[INFO] Model saved locally and will be uploaded when connection is restored")
+    else:
+        print("\n[SUCCESS] Best model saved locally!")
+        print(f"[INFO] Model files: {model_path}, {scaler_path}")
+        print(f"[INFO] Upload to W&B when connection is restored: wandb sync")
     
     return self_training, scaler
 

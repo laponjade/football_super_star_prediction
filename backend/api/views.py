@@ -17,6 +17,8 @@ from .serializers import (
 from .ml_model import predict
 from .feature_engineering import player_data_to_features, form_data_to_features
 from .datasets import load_fifa21_dataset, build_fifa21_dataset
+from .monitoring import monitor
+import time
 
 # Cache for player data
 _player_df = None
@@ -532,8 +534,24 @@ def predict_player(request):
             }
             features = form_data_to_features(form_data)
 
-        # Make prediction
-        prediction_result = predict(features)
+        # Make prediction with monitoring
+        start_time = time.time()
+        try:
+            prediction_result = predict(features)
+            error = None
+        except Exception as e:
+            error = e
+            raise
+        finally:
+            latency_ms = (time.time() - start_time) * 1000
+            # Log prediction for monitoring
+            if 'prediction_result' in locals():
+                monitor.log_prediction(
+                    prediction_result,
+                    latency_ms,
+                    error,
+                    features=features.tolist() if hasattr(features, 'tolist') else features
+                )
 
         # Calculate probability percentage and tier
         probability_pct = prediction_result["probability"] * 100

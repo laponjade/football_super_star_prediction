@@ -59,7 +59,7 @@ def train_with_tracking(config=None):
     X_test = test_df[feature_columns]
     y_test = test_df[target]
     
-    # Log dataset info
+    # Log dataset info at step 0 (initial state)
     wandb.log({
         "dataset/train_size": len(X_train),
         "dataset/val_size": len(X_val),
@@ -69,7 +69,7 @@ def train_with_tracking(config=None):
         "dataset/train_class_1": int((y_train == 1).sum()),
         "dataset/val_class_0": int((y_val == 0).sum()),
         "dataset/val_class_1": int((y_val == 1).sum()),
-    })
+    }, step=0)
     
     # Create semi-supervised split
     from sklearn.model_selection import train_test_split
@@ -133,12 +133,29 @@ def train_with_tracking(config=None):
     training_time = time.time() - start_time
     print(f"Training completed in {training_time:.2f} seconds")
     
-    wandb.log({"training_time": training_time})
+    # Log training time at step 0
+    wandb.log({"training_time": training_time}, step=0)
     
-    # Log self-training iterations
+    # Log self-training iterations with proper step numbers
+    # labeled_iter_ is an array where each element indicates which iteration labeled that sample
+    # We need to count how many samples were labeled in each iteration
     if hasattr(self_training, 'labeled_iter_'):
-        for i, n_labeled in enumerate(self_training.labeled_iter_):
-            wandb.log({f"self_training/labels_added_iter_{i}": n_labeled})
+        from collections import Counter
+        # Count samples per iteration (0 = original labels, >0 = iteration number, -1 = never labeled)
+        iteration_counts = Counter(self_training.labeled_iter_)
+        # Get max iteration number (exclude -1 and 0)
+        max_iter = max([k for k in iteration_counts.keys() if k > 0], default=0)
+        
+        cumulative_labels = 0
+        for iter_num in range(1, max_iter + 1):  # Start from 1 (iteration 0 is original labels)
+            n_labeled = iteration_counts.get(iter_num, 0)
+            cumulative_labels += n_labeled
+            # Log each iteration with step number for time-series visualization
+            wandb.log({
+                f"self_training/labels_added_iter_{iter_num}": n_labeled,
+                "self_training/labels_added": n_labeled,  # Single metric for time-series
+                "self_training/cumulative_labels": cumulative_labels  # Cumulative total
+            }, step=iter_num)
     
     # Evaluate on validation set
     print("\nEvaluating on validation set...")
@@ -152,7 +169,9 @@ def train_with_tracking(config=None):
     val_roc_auc = roc_auc_score(y_val, y_val_proba)
     val_log_loss = log_loss(y_val, y_val_proba)
     
-    # Log validation metrics
+    # Log validation metrics at final step (after training)
+    # Use a step number after all self-training iterations
+    final_step = len(self_training.labeled_iter_) if hasattr(self_training, 'labeled_iter_') else 1
     wandb.log({
         "val/accuracy": val_accuracy,
         "val/precision": val_precision,
@@ -160,7 +179,7 @@ def train_with_tracking(config=None):
         "val/f1": val_f1,
         "val/roc_auc": val_roc_auc,
         "val/log_loss": val_log_loss
-    })
+    }, step=final_step + 1)
     
     print(f"\nValidation Metrics:")
     print(f"Accuracy:  {val_accuracy:.4f}")
@@ -182,7 +201,8 @@ def train_with_tracking(config=None):
     test_roc_auc = roc_auc_score(y_test, y_test_proba)
     test_log_loss = log_loss(y_test, y_test_proba)
     
-    # Log test metrics
+    # Log test metrics at final step
+    final_step = len(self_training.labeled_iter_) if hasattr(self_training, 'labeled_iter_') else 1
     wandb.log({
         "test/accuracy": test_accuracy,
         "test/precision": test_precision,
@@ -190,7 +210,7 @@ def train_with_tracking(config=None):
         "test/f1": test_f1,
         "test/roc_auc": test_roc_auc,
         "test/log_loss": test_log_loss
-    })
+    }, step=final_step + 2)
     
     # Create and log confusion matrix
     cm_val = confusion_matrix(y_val, y_val_pred)

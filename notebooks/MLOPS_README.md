@@ -38,6 +38,17 @@ This directory contains the complete MLOps implementation for the Football Super
   - Retrains with optimal hyperparameters
   - Registers model artifact
 
+#### Phase 5: Production Monitoring
+- **`mlops_production_monitoring.py`** - Production monitoring script
+  - Model health checks
+  - Data drift detection
+  - Prediction monitoring
+  - Performance metrics tracking
+- **`backend/api/monitoring.py`** - Django API monitoring integration
+  - Real-time prediction tracking
+  - Latency and error monitoring
+  - Automatic W&B logging
+
 ### Pipeline Management
 
 - **`run_mlops_pipeline.py`** - Main pipeline runner
@@ -64,6 +75,12 @@ This directory contains the complete MLOps implementation for the Football Super
 - **`test_all_phases.py`** - Test script for all 4 phases
   - Runs complete pipeline with reduced trials
   - Useful for quick verification
+
+- **`mlops_production_monitoring.py`** - Production monitoring
+  - Model health checks
+  - Data drift detection
+  - Prediction monitoring
+  - Performance metrics tracking
 
 ---
 
@@ -105,7 +122,21 @@ python mlops_hyperparameter_sweep.py
 
 # Phase 4: Model Registration (requires sweep_id)
 python mlops_model_registry.py
+
+# Phase 5: Production Monitoring
+python mlops_production_monitoring.py
 ```
+
+### 5. Production Monitoring (Automatic)
+
+Monitoring is **automatic** when using the Django API:
+```bash
+cd backend
+python manage.py runserver
+# All predictions are automatically monitored!
+```
+
+View metrics in W&B dashboard under `job_type="production-monitoring"`
 
 ---
 

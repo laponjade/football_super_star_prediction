@@ -29,7 +29,16 @@ def train():
     This function is called by W&B sweep agent for each trial.
     """
     # Initialize W&B run (automatically part of sweep)
-    run = wandb.init()
+    # Set mode to reduce upload size and prevent retry loops
+    run = wandb.init(
+        settings=wandb.Settings(
+            _disable_stats=True,  # Disable system stats to reduce upload size
+            _disable_meta=True,    # Disable metadata collection
+            console="off",         # Reduce console logging
+            _disable_service=True,  # Disable service thread to reduce overhead
+            start_method="thread"  # Use thread instead of fork for better compatibility
+        )
+    )
     
     # Load versioned dataset from W&B
     print("Loading dataset from W&B artifact...")
@@ -112,18 +121,31 @@ def train():
     val_log_loss = log_loss(y_val, y_val_proba)
     
     # Log all metrics to W&B
-    wandb.log({
-        "val/accuracy": val_accuracy,
-        "val/precision": val_precision,
-        "val/recall": val_recall,
-        "val/f1": val_f1,
-        "val/roc_auc": val_roc_auc,
-        "val/log_loss": val_log_loss
-    })
+    try:
+        wandb.log({
+            "val/accuracy": val_accuracy,
+            "val/precision": val_precision,
+            "val/recall": val_recall,
+            "val/f1": val_f1,
+            "val/roc_auc": val_roc_auc,
+            "val/log_loss": val_log_loss
+        })
+    except Exception as e:
+        print(f"[WARN] Failed to log metrics to W&B: {e}")
+        # Continue anyway - metrics are printed to console
     
     print(f"Validation F1: {val_f1:.4f}, ROC-AUC: {val_roc_auc:.4f}")
     
-    run.finish()
+    # Finish run with error handling
+    try:
+        run.finish()
+    except Exception as e:
+        print(f"[WARN] Error finishing W&B run: {e}")
+        # Try to close gracefully
+        try:
+            wandb.finish()
+        except:
+            pass
 
 def run_sweep(num_trials=None):
     """
@@ -138,17 +160,36 @@ def run_sweep(num_trials=None):
     from mlops_config import SWEEP_TRIALS
     if num_trials is None:
         num_trials = SWEEP_TRIALS
+    
+    print(f"\n[INFO] Starting sweep with {num_trials} trials...")
+    print(f"[INFO] This may take 30-60 minutes depending on your system.")
+    print(f"[INFO] You can stop it with Ctrl+C (it will finish current trial first).\n")
+    
     # Create sweep
-    sweep_id = wandb.sweep(sweep_config, project=PROJECT, entity=ENTITY)
+    try:
+        sweep_id = wandb.sweep(sweep_config, project=PROJECT, entity=ENTITY)
+        print(f"[OK] Created sweep with ID: {sweep_id}")
+        print(f"[URL] Sweep: https://wandb.ai/{ENTITY}/{PROJECT}/sweeps/{sweep_id}")
+    except Exception as e:
+        print(f"[FAIL] Failed to create sweep: {e}")
+        return None
     
-    print(f"Created sweep with ID: {sweep_id}")
-    print(f"Sweep URL: https://wandb.ai/{ENTITY}/{PROJECT}/sweeps/{sweep_id}")
-    
-    # Run sweep agent
-    wandb.agent(sweep_id, train, count=num_trials)
-    
-    print(f"\n[SUCCESS] Sweep completed! View results at:")
-    print(f"https://wandb.ai/{ENTITY}/{PROJECT}/sweeps/{sweep_id}")
+    # Run sweep agent with error handling
+    try:
+        print(f"\n[INFO] Starting sweep agent... (Press Ctrl+C to stop after current trial)")
+        wandb.agent(sweep_id, train, count=num_trials)
+        print(f"\n[SUCCESS] Sweep completed! View results at:")
+        print(f"https://wandb.ai/{ENTITY}/{PROJECT}/sweeps/{sweep_id}")
+    except KeyboardInterrupt:
+        print(f"\n[WARN] Sweep interrupted by user.")
+        print(f"[INFO] Completed trials are saved. View at:")
+        print(f"https://wandb.ai/{ENTITY}/{PROJECT}/sweeps/{sweep_id}")
+    except Exception as e:
+        print(f"\n[ERROR] Sweep failed: {e}")
+        print(f"[INFO] Partial results may be available at:")
+        print(f"https://wandb.ai/{ENTITY}/{PROJECT}/sweeps/{sweep_id}")
+        import traceback
+        traceback.print_exc()
     
     return sweep_id  # Return sweep_id for use in Phase 4
 
